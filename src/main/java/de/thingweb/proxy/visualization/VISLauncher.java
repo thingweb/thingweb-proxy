@@ -2,9 +2,19 @@ package de.thingweb.proxy.visualization;
 
 import java.io.IOException;
 import java.io.InputStream;
+import java.net.InetAddress;
+import java.net.NetworkInterface;
+import java.net.SocketException;
+import java.net.UnknownHostException;
+import java.text.DateFormat;
+import java.text.SimpleDateFormat;
 import java.util.ArrayList;
+import java.util.Collections;
+import java.util.Date;
 import java.util.Iterator;
 import java.util.List;
+import java.util.TimeZone;
+import java.util.concurrent.TimeUnit;
 
 import org.json.JSONArray;
 import org.json.JSONObject;
@@ -24,7 +34,10 @@ import fi.iki.elonen.NanoHTTPD.Response.Status;
 
 public class VISLauncher extends NanoHTTPD {
 	
+	public static final String ANY_CLIENT = "ANY_CLIENT";
+	
 	private long HOW_LONG_TO_SHOW_EVENTS_IN_MS = 120000; // 1min == 60000 ms
+	private long HOW_LONG_TO_SHOW_EVENTS_IN_NS = TimeUnit.MILLISECONDS.toNanos(HOW_LONG_TO_SHOW_EVENTS_IN_MS); //  
 	
 	private static final Logger log = LoggerFactory.getLogger(VISLauncher.class);
 	
@@ -84,7 +97,6 @@ public class VISLauncher extends NanoHTTPD {
 		return sb;
 	}
 	
-	final String ANY_CLIENT = "ANY_CLIENT";
 	
 	StringBuilder replaceNodes(StringBuilder sb) throws Exception {
 		int b = sb.indexOf(NODES_BEGIN);
@@ -186,8 +198,8 @@ public class VISLauncher extends NanoHTTPD {
 		for(int i=0;i<events.size(); i++) {
 			RestEvent t = events.get(i);
 			
-			long tms = t.timestamp.getTime();
-			if(( System.currentTimeMillis() - tms ) > this.HOW_LONG_TO_SHOW_EVENTS_IN_MS ) {
+			long tms = t.timestampNS; // .getTime();
+			if(( System.nanoTime() - tms ) > this.HOW_LONG_TO_SHOW_EVENTS_IN_NS ) {
 				continue;
 			}
 
@@ -201,18 +213,21 @@ public class VISLauncher extends NanoHTTPD {
 			if(t.from == null) {
 				sbEdges.append("'" + ANY_CLIENT + "'");
 			} else {
-				sbEdges.append("'" + t.from.getName() + "'");
+				sbEdges.append("'" + t.from + "'");
 			}
 			
 			sbEdges.append(',');
 			sbEdges.append(" to: ");
-			sbEdges.append("'" + t.to.getName() + "'");
+			sbEdges.append("'" + t.to + "'");
 			
 			sbEdges.append(',');
 			sbEdges.append(" label: ");
 			sbEdges.append("'" + t.restMethod + " " + t.name + "'");
 			
-			sbEdges.append(",  title: 'Success=" + t.success +"<br />Timestamp=" + t.timestamp + "'");
+			sbEdges.append(",  title: 'Success=" + t.success +"<br />Timestamp=" + t.timestamp  + "'");
+			
+//			// avoid dynamic edges 
+//			sbEdges.append(", physics:true ");
 			
 			sbEdges.append(", arrows:'to'");
 			
@@ -231,6 +246,44 @@ public class VISLauncher extends NanoHTTPD {
 		return sb;
 	}
 
+	
+	public static void replaceAll(StringBuilder sb, String toReplace, String replacement) {
+	    int index = -1;
+	    while ((index = sb.lastIndexOf(toReplace)) != -1) {
+	        sb.replace(index, index + toReplace.length(), replacement);
+	    }
+	}
+	
+    public static String getIpAddress(boolean preferIPv4) throws UnknownHostException, SocketException {
+        if(!InetAddress.getLocalHost().isLoopbackAddress()) {
+        	log.info("IP_ address: " + InetAddress.getLocalHost().getHostAddress());
+            return InetAddress.getLocalHost().getHostAddress();
+        } else {
+            List<NetworkInterface> interfaces = Collections.list(NetworkInterface.getNetworkInterfaces());
+            for (NetworkInterface intf : interfaces) {
+                List<InetAddress> addrs = Collections.list(intf.getInetAddresses());
+                for (InetAddress addr : addrs) {
+                    if (!addr.isLoopbackAddress()) {
+                    	// avoid IPV6 ?
+                    	String s = addr.getHostAddress();
+                    	log.info("IPv address: " + s);
+                    	if(preferIPv4 && s.length() > 15) {
+                    		// IPV6
+                    		log.info("Found IPv6 address? Try to find IPv4");
+                    	} else {
+                    		return s;
+                    	}
+
+                    }
+                }
+            }
+        }
+
+        // well - we tried. but it seems there is only loopback
+        return InetAddress.getLocalHost().getHostAddress();
+    }
+	
+	
 	@Override
 	public Response serve(IHTTPSession session) {
 		try {
@@ -244,6 +297,8 @@ public class VISLauncher extends NanoHTTPD {
 				// return newChunkedResponse(Response.Status.OK, MIME_HTML, is);
 				StringBuilder sb = convertStreamToString(is);
 				is.close();
+				
+				replaceAll(sb, "localhost:8080", getIpAddress(true) + ":" + this.getListeningPort());
 				
 				sb = replaceNodes(sb);
 				sb = replaceEdges(sb);
@@ -262,17 +317,31 @@ public class VISLauncher extends NanoHTTPD {
 				return new Response(Response.Status.OK, MIME_JSON, ja.toString());
 			} else if (EDGES.equals(uri)) {
 				List<RestEvent> events = this.proxyState.getRestEvents();
+				
+				int ms = -1;
+				try {
+					String sms = session.getParms().get("ms");
+					ms = Integer.parseInt(sms);
+				} catch (Exception e) {
+				}
+				
 				JSONArray ja = new JSONArray();
 				for(RestEvent re : events) {
-					JSONObject jo = new JSONObject();
-					jo.put("timestamp", re.timestamp);
-					jo.put("name", re.name);
-					jo.put("method", re.restMethod);
-					jo.put("from", re.from);
-					jo.put("to", re.to);
-					jo.put("success", re.success);
 					
-					ja.put(jo);
+					if(ms < 0 || (System.currentTimeMillis()- re.timestamp.getTime()) <= ms ) {
+						JSONObject jo = new JSONObject();
+						jo.put("timestampNS", re.timestampNS);
+						jo.put("timestamp", re.timestamp);
+						jo.put("name", re.name);
+						jo.put("method", re.restMethod);
+						jo.put("from", re.from);
+						jo.put("to", re.to);
+						jo.put("success", re.success);
+						
+						ja.put(jo);
+					}
+					
+
 				}
 				return new Response(Response.Status.OK, MIME_JSON, ja.toString());
 			} else {

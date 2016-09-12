@@ -54,6 +54,12 @@
         }
     </style>
 
+	<!-- Bootstrap -->
+	<link rel="stylesheet" href="http://maxcdn.bootstrapcdn.com/bootstrap/3.3.6/css/bootstrap.min.css">
+	<script src="https://ajax.googleapis.com/ajax/libs/jquery/1.12.4/jquery.min.js"></script>
+	<script src="http://maxcdn.bootstrapcdn.com/bootstrap/3.3.6/js/bootstrap.min.js"></script>
+
+
     <!-- <script type="text/javascript" src="vis.js"></script> -->
 	<script type="text/javascript" src="https://cdnjs.cloudflare.com/ajax/libs/vis/4.16.1/vis.js"></script>
     <!-- <link href="vis.css" rel="stylesheet" type="text/css"/> -->
@@ -174,6 +180,57 @@
         }
 
     </script>
+    
+    <!-- JS Code -->
+	<script>
+	function getCallBack(xhttp, name) {
+		if (xhttp.readyState == 4) {  
+			if (xhttp.status == 200) {  
+				console.log(xhttp.responseText);
+				var jEdges = JSON.parse(xhttp.responseText);
+				// alert(jEdges);
+				// document.getElementById(name).value = res[name];
+				// debug(xhttp.responseText);
+				
+				try {
+	                // remove all edges
+					edges.clear();
+	                
+	                var jEdgesLen = jEdges.length;
+	                
+	                for(i=0; i<jEdgesLen; i++)  {
+	                	var jEdge = jEdges[i];
+	                
+		                edges.add({
+		                    id:     jEdge['timestampNS'],
+		                    from:   jEdge['from'],
+		                    to:     jEdge['to'],
+		                    arrows: 'to',
+		                    label:  jEdge['method'] + " " + jEdge['name'],
+		                    title:  'Success=' + jEdge['success'] + "<br />Timestamp=" + jEdge['timestamp'] 
+		                });
+					}
+	            }
+	            catch (err) {
+	                alert(err);
+	            }
+				
+				
+			} else {  
+				console.log("ErrorGET", xhttp.statusText + xhttp.status);
+			}  
+		}
+	}
+
+	function get(name) {
+		var xhttp = new XMLHttpRequest();
+		xhttp.onreadystatechange = function () {
+	        getCallBack(xhttp,name);
+	    };
+		xhttp.open("GET", "http://localhost:8080/" + name, true);
+		xhttp.send();
+	}
+	 </script>
 </head>
 
 <body onload="draw();">
@@ -187,6 +244,11 @@
 
 <h1>Network View</h1>
 <div id="network"></div>
+
+<h1>Updates</h1>
+<input value="60000" style="width: 50%" type="number" size="3" maxlength="3"   min="0"  name="ms" id="ms" /> milliseconds 
+<button class="btn btn-info" title="Refresh" onclick="get('edges?ms=60000')"><span class="glyphicon glyphicon-refresh" aria-hidden="true"></span></button>
+
 
 <h1>Adjust</h1>
 <table>

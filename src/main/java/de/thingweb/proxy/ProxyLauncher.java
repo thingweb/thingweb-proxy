@@ -131,6 +131,7 @@ public class ProxyLauncher implements ProxyState {
 
 					Thing thingDesc = ThingDescriptionParser.fromBytes(td.toString().getBytes());
 					ThingInterface ti = server.addThing(thingDesc);
+					// proxiedTDs.add(new TDContainer(new ThingInterfaceProxy(ti, restEvents), tdOriginal));
 					proxiedTDs.add(new TDContainer(ti, tdOriginal));
 
 					// attach handlers
@@ -235,16 +236,32 @@ public class ProxyLauncher implements ProxyState {
 					} else {
 						result =  callbackGETX.response;
 						
-						// need to update value
+						if(result instanceof Content) {
+							Object value = de.thingweb.util.encoding.ContentHelper.getValueFromJson((Content) result);
+							log.info("Content GET value is " + value);	
+						}
+						
+						// need to update value?
 						thingProps.put(property.getName(), result);
-						// tiLocal.setProperty(property, result);
+						tiLocal.setProperty(property, result); // TODO not really sure why this is needed as well
 						
 						successGET = true;
 					}
 				} catch (Exception e) {
 				}
 				
-				this.restEvents.add(new RestEvent(property.getName(), RestMethod.GET, null, client4Remote.getThing(), successGET));
+				// TODO hack, but how to remove previous PUT that seems to be necessary?
+				if(restEvents.size()> 0 ) {
+					int lastIndex = restEvents.size()-1;
+					RestEvent re = restEvents.get(lastIndex);
+					// 1000000 ns == 1 ms
+					if((System.nanoTime() - re.timestampNS ) < 5000000 ) { // 5 millisecs
+						// previous update was due to  GET --> remove it from log
+						this.restEvents.remove(lastIndex);
+					}
+				}
+				
+				this.restEvents.add(new RestEvent(property.getName(), RestMethod.GET, VISLauncher.ANY_CLIENT, client4Remote.getThing().getName(), successGET));
 			}
 		};
 		tiLocal.onPropertyRead(callbackGET);
@@ -271,7 +288,7 @@ public class ProxyLauncher implements ProxyState {
 					if(input instanceof Content) {
 						cont = (Content) input;
 						Object value = de.thingweb.util.encoding.ContentHelper.getValueFromJson(cont);
-						log.info("Content value is " + value);
+						log.info("Content PUT value is " + value);
 						
 					} else {
 						cont = de.thingweb.util.encoding.ContentHelper.makeJsonValue(input); // , de.thingweb.thing.MediaType.APPLICATION_JSON);
@@ -300,7 +317,7 @@ public class ProxyLauncher implements ProxyState {
 					log.error(e.getMessage());
 				}
 				
-				this.restEvents.add(new RestEvent(property.getName(), RestMethod.PUT, null, client4Remote.getThing(), successPUT));
+				this.restEvents.add(new RestEvent(property.getName(), RestMethod.PUT, VISLauncher.ANY_CLIENT, client4Remote.getThing().getName(), successPUT));
 			});
 		}
 
@@ -345,7 +362,7 @@ public class ProxyLauncher implements ProxyState {
 				} catch (Exception e) {
 				}
 				
-				this.restEvents.add(new RestEvent(action.getName(), RestMethod.POST, null, client4Remote.getThing(), successPOST));
+				this.restEvents.add(new RestEvent(action.getName(), RestMethod.POST, VISLauncher.ANY_CLIENT, client4Remote.getThing().getName(), successPOST));
 				return result;
 			};
 			
