@@ -33,6 +33,7 @@ import de.thingweb.discovery.TDRepository;
 import de.thingweb.proxy.visualization.VISLauncher;
 import de.thingweb.security.TokenRequirements;
 import de.thingweb.servient.ServientBuilder;
+import de.thingweb.servient.ServientBuilderProxy;
 import de.thingweb.servient.ThingInterface;
 import de.thingweb.servient.ThingServer;
 import de.thingweb.thing.Action;
@@ -73,10 +74,10 @@ public class ProxyLauncher implements ProxyState {
 	}
 
 	public ProxyLauncher(int limitTDs) throws Exception {
-		ServientBuilder.initialize();
+		ServientBuilderProxy.initialize();
 
 		final TokenRequirements tokenRequirements = null; // NicePlugFestTokenReqFactory.createTokenRequirements();
-		ThingServer server = ServientBuilder.newThingServer(tokenRequirements);
+		ThingServer server = ServientBuilderProxy.newThingServer(tokenRequirements);
 
 		// fetch all existing "things" in repo and create proxy for it
 		JSONObject jo = tdRepo.nameOfThings(); // all things
@@ -372,7 +373,7 @@ public class ProxyLauncher implements ProxyState {
 	}
 
 	public void start() throws Exception {
-		ServientBuilder.start();
+		ServientBuilderProxy.start();
 
 		// start visualizer
 		VISLauncher vis = new VISLauncher(this);

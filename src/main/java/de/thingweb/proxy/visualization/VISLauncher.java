@@ -30,6 +30,7 @@ import de.thingweb.proxy.RestEvent;
 import de.thingweb.thing.Metadata;
 import de.thingweb.thing.Thing;
 import fi.iki.elonen.NanoHTTPD;
+import fi.iki.elonen.NanoHTTPD.Response;
 import fi.iki.elonen.NanoHTTPD.Response.Status;
 
 public class VISLauncher extends NanoHTTPD {
@@ -97,6 +98,20 @@ public class VISLauncher extends NanoHTTPD {
 		return sb;
 	}
 	
+	protected Response addCORSHeaders(Response resp) {
+		// TODO defaulting cors - should be configurable
+		final String DEFAULT_ALLOWED_HEADERS = "Authorization,origin,accept,content-type";
+		final String ALLOWED_METHODS = "GET, POST, PUT, DELETE, OPTIONS, HEAD";
+
+		resp.addHeader("Access-Control-Allow-Origin","*");
+		resp.addHeader("Access-Control-Allow-Headers", DEFAULT_ALLOWED_HEADERS);
+		resp.addHeader("Access-Control-Allow-Credentials", "true");
+		resp.addHeader("Access-Control-Allow-Methods", ALLOWED_METHODS);
+		//resp.addHeader("Access-Control-Max-Age", "" + MAX_AGE);
+
+		return resp;
+	}
+	
 	
 	StringBuilder replaceNodes(StringBuilder sb) throws Exception {
 		int b = sb.indexOf(NODES_BEGIN);
@@ -128,20 +143,31 @@ public class VISLauncher extends NanoHTTPD {
 		
 		sbNodes.append("\n\r");
 		
+		// check for VIS errors whether ID is duplicated and refuse (i.e. continue loop)
+		
+		List<String> knownIDs = new ArrayList<String>();
+		
 		//  {id: '1', label: 'Node 1', title: 'ddd'},
 		for(int i=0;i<things.size(); i++) {
 			Thing t = things.get(i);
 
-			sbNodes.append('{');
+			String name = t.getName();
+			name = name.replace(this.proxyState.getProxyPrefix(), "");
 			
+			if(knownIDs.contains(name)) {
+				// grr, refuse this
+				continue;
+			} else {
+				knownIDs.add(name);
+			}
+			
+			sbNodes.append('{');
 			sbNodes.append("id: ");
-			String n = t.getName();
-			n = n.replace(this.proxyState.getProxyPrefix(), "");
-			sbNodes.append("'" + n + "'");
+			sbNodes.append("'" + name + "'");
 			
 			sbNodes.append(',');
 			sbNodes.append(" label: ");
-			sbNodes.append("'" + n + "'");
+			sbNodes.append("'" + name + "'");
 			
 			// avoid dynamic nodes 
 			sbNodes.append(", physics:false ");
@@ -343,7 +369,7 @@ public class VISLauncher extends NanoHTTPD {
 					
 
 				}
-				return new Response(Response.Status.OK, MIME_JSON, ja.toString());
+				return addCORSHeaders(new Response(Response.Status.OK, MIME_JSON, ja.toString()));
 			} else {
 				String msg = "<html><body><h1>Not Found!</h1>\n";
 				msg += "</body></html>\n";
